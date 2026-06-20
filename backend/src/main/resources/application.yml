@@ -1,0 +1,54 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: taskforge
+  datasource:
+    url: ${DATABASE_URL:jdbc:h2:mem:taskforge;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH}
+    username: ${DATABASE_USERNAME:sa}
+    password: ${DATABASE_PASSWORD:}
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+taskforge:
+  integrations:
+    rabbitmq:
+      enabled: ${RABBITMQ_ENABLED:false}
+      exchange: ${RABBITMQ_EXCHANGE:taskforge.events}
+    redis:
+      enabled: ${REDIS_STATS_ENABLED:false}
+      stats-key: ${REDIS_STATS_KEY:taskforge:queue-stats}
+  worker:
+    enabled: ${WORKER_ENABLED:true}
+    node-id: ${WORKER_NODE_ID:local-node}
+    poll-interval-ms: ${WORKER_POLL_INTERVAL_MS:1000}
+    batch-size: ${WORKER_BATCH_SIZE:4}
+    thread-count: ${WORKER_THREAD_COUNT:4}
+    stale-job-timeout-seconds: ${STALE_JOB_TIMEOUT_SECONDS:90}
+    max-attempts: ${MAX_ATTEMPTS:3}

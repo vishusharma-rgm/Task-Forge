@@ -1,0 +1,11 @@
+global:
+  scrape_interval: 10s
+
+scrape_configs:
+  - job_name: "taskforge"
+    metrics_path: "/actuator/prometheus"
+    static_configs:
+      - targets:
+          - "backend:8080"
+          - "worker-a:8080"
+          - "worker-b:8080"
