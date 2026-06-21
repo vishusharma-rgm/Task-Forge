@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Activity, BarChart3, CheckCircle2, Clock3, Gauge, GitBranch, ListRestart, Play, RefreshCw, Send, Server, ShieldAlert, Zap } from "lucide-react";
 import "./styles.css";
@@ -70,6 +70,21 @@ function apiPath(path: string) {
   return `${apiBase}${path}`;
 }
 
+async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = 15000) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error("Request timed out. Free backend may be waking up; try refresh again.");
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
 function App() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [metrics, setMetrics] = useState<Metrics | null>(null);
@@ -83,14 +98,21 @@ function App() {
   const [priority, setPriority] = useState(50);
   const [payload, setPayload] = useState('{"to":"student@example.com","subject":"Welcome"}');
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [message, setMessage] = useState("");
+  const refreshInFlight = useRef(false);
 
   async function refresh() {
+    if (refreshInFlight.current) {
+      return;
+    }
+    refreshInFlight.current = true;
+    setRefreshing(true);
     const statusQuery = statusFilter === "ALL" ? "" : `?status=${statusFilter}`;
     try {
       const [jobsRes, metricsRes] = await Promise.all([
-        fetch(apiPath(`/api/jobs${statusQuery}`)),
-        fetch(apiPath("/api/metrics"))
+        fetchWithTimeout(apiPath(`/api/jobs${statusQuery}`)),
+        fetchWithTimeout(apiPath("/api/metrics"))
       ]);
       if (!jobsRes.ok || !metricsRes.ok) {
         throw new Error("Backend API is not reachable");
@@ -112,11 +134,11 @@ function App() {
         }
         return [...samples.slice(-17), nextSample];
       });
-      const workersRes = await fetch(apiPath("/api/workers"));
+      const workersRes = await fetchWithTimeout(apiPath("/api/workers"));
       if (workersRes.ok) {
         setWorkers(await workersRes.json());
       }
-      const redisRes = await fetch(apiPath("/api/metrics/redis"));
+      const redisRes = await fetchWithTimeout(apiPath("/api/metrics/redis"));
       if (redisRes.ok) {
         setRedisStats(await redisRes.json());
       }
@@ -125,6 +147,9 @@ function App() {
       }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Backend API is not reachable");
+    } finally {
+      setRefreshing(false);
+      refreshInFlight.current = false;
     }
   }
 
@@ -135,7 +160,7 @@ function App() {
   }, [statusFilter, selectedJobId]);
 
   async function refreshTimeline(jobId: string) {
-    const response = await fetch(apiPath(`/api/jobs/${jobId}/events`));
+    const response = await fetchWithTimeout(apiPath(`/api/jobs/${jobId}/events`));
     if (response.ok) {
       setEvents(await response.json());
     }
@@ -152,11 +177,11 @@ function App() {
     setMessage("");
     try {
       JSON.parse(payload);
-      const response = await fetch(apiPath("/api/jobs"), {
+      const response = await fetchWithTimeout(apiPath("/api/jobs"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type, priority, payload })
-      });
+      }, 20000);
       if (!response.ok) {
         throw new Error((await response.json()).message ?? "Job submission failed");
       }
@@ -170,7 +195,7 @@ function App() {
   }
 
   async function requeue(id: string) {
-    await fetch(apiPath(`/api/jobs/${id}/requeue`), { method: "POST" });
+    await fetchWithTimeout(apiPath(`/api/jobs/${id}/requeue`), { method: "POST" });
     await refresh();
   }
 
@@ -201,7 +226,7 @@ function App() {
             <h1>TaskForge</h1>
           </div>
         </div>
-        <button className="icon-button" onClick={refresh} aria-label="Refresh dashboard" title="Refresh dashboard">
+        <button className={`icon-button ${refreshing ? "is-spinning" : ""}`} onClick={refresh} aria-label="Refresh dashboard" title="Refresh dashboard" disabled={refreshing}>
           <RefreshCw size={18} />
         </button>
       </section>
