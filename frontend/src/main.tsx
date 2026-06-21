@@ -95,6 +95,7 @@ function App() {
       if (!jobsRes.ok || !metricsRes.ok) {
         throw new Error("Backend API is not reachable");
       }
+      setMessage((current) => current === "Backend API is not reachable" || current === "Load failed" ? "" : current);
       setJobs(await jobsRes.json());
       const metricsSnapshot: Metrics = await metricsRes.json();
       setMetrics(metricsSnapshot);
