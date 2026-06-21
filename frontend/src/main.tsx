@@ -63,7 +63,8 @@ type QueueSample = {
 
 const statusOrder: JobStatus[] = ["PENDING", "RUNNING", "SUCCEEDED", "FAILED", "DEAD"];
 const jobTypes: JobType[] = ["EMAIL", "IMAGE_RESIZE", "DATA_EXPORT", "WEBHOOK"];
-const apiBase = window.location.port === "5173" ? "http://localhost:8080" : "";
+const configuredApiBase = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "");
+const apiBase = configuredApiBase ?? (window.location.port === "5173" ? "http://localhost:8080" : "");
 
 function apiPath(path: string) {
   return `${apiBase}${path}`;

@@ -1,0 +1,44 @@
+services:
+  - type: web
+    name: taskforge-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: POSTGRES_CONNECTION_STRING
+        fromDatabase:
+          name: taskforge-postgres
+          property: connectionString
+      - key: FRONTEND_ORIGIN
+        value: https://taskforge-dashboard.onrender.com
+      - key: RABBITMQ_ENABLED
+        value: "false"
+      - key: REDIS_STATS_ENABLED
+        value: "false"
+      - key: WORKER_NODE_ID
+        value: render-api
+      - key: WORKER_THREAD_COUNT
+        value: "4"
+      - key: WORKER_BATCH_SIZE
+        value: "4"
+
+  - type: web
+    name: taskforge-dashboard
+    runtime: static
+    buildCommand: cd frontend && npm ci && npm run build
+    staticPublishPath: ./frontend/dist
+    envVars:
+      - key: VITE_API_BASE_URL
+        value: https://taskforge-api.onrender.com
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+databases:
+  - name: taskforge-postgres
+    databaseName: taskforge
+    user: taskforge
+    plan: basic-256mb
