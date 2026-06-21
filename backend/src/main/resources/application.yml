@@ -35,6 +35,11 @@ management:
     health:
       probes:
         enabled: true
+  health:
+    rabbit:
+      enabled: ${RABBITMQ_HEALTH_ENABLED:false}
+    redis:
+      enabled: ${REDIS_HEALTH_ENABLED:false}
 
 taskforge:
   integrations:
