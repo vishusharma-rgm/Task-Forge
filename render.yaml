@@ -41,4 +41,4 @@ databases:
   - name: taskforge-postgres
     databaseName: taskforge
     user: taskforge
-    plan: basic-256mb
+    plan: free
