@@ -99,6 +99,16 @@ h2 {
   animation: spin 900ms linear infinite;
 }
 
+.dashboard-message {
+  margin: -8px 0 18px;
+  padding: 10px 12px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1e3a8a;
+  font-size: 14px;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);

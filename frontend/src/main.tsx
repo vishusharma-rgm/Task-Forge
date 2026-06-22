@@ -66,11 +66,19 @@ const jobTypes: JobType[] = ["EMAIL", "IMAGE_RESIZE", "DATA_EXPORT", "WEBHOOK"];
 const configuredApiBase = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "");
 const apiBase = configuredApiBase ?? (window.location.port === "5173" ? "http://localhost:8080" : "");
 
+function timeoutFromEnv(value: string | undefined, fallbackMs: number) {
+  const timeoutMs = Number(value);
+  return Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : fallbackMs;
+}
+
+const readTimeoutMs = timeoutFromEnv(import.meta.env.VITE_API_READ_TIMEOUT_MS, 30000);
+const submitTimeoutMs = timeoutFromEnv(import.meta.env.VITE_API_SUBMIT_TIMEOUT_MS, 120000);
+
 function apiPath(path: string) {
   return `${apiBase}${path}`;
 }
 
-async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = 15000) {
+async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = readTimeoutMs) {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -99,7 +107,8 @@ function App() {
   const [payload, setPayload] = useState('{"to":"student@example.com","subject":"Welcome"}');
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [message, setMessage] = useState("");
+  const [formMessage, setFormMessage] = useState("");
+  const [dashboardMessage, setDashboardMessage] = useState("");
   const refreshInFlight = useRef(false);
   const refreshQueued = useRef(false);
 
@@ -119,7 +128,7 @@ function App() {
       if (!jobsRes.ok || !metricsRes.ok) {
         throw new Error("Backend API is not reachable");
       }
-      setMessage((current) => current === "Backend API is not reachable" || current === "Load failed" ? "" : current);
+      setDashboardMessage("");
       setJobs(await jobsRes.json());
       const metricsSnapshot: Metrics = await metricsRes.json();
       setMetrics(metricsSnapshot);
@@ -150,7 +159,7 @@ function App() {
         await refreshTimeline(selectedJobId);
       }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Backend API is not reachable");
+      setDashboardMessage(error instanceof Error ? error.message : "Backend API is not reachable");
     } finally {
       setRefreshing(false);
       refreshInFlight.current = false;
@@ -182,21 +191,21 @@ function App() {
   async function submitJob(event: React.FormEvent) {
     event.preventDefault();
     setLoading(true);
-    setMessage("");
+    setFormMessage("");
     try {
       JSON.parse(payload);
       const response = await fetchWithTimeout(apiPath("/api/jobs"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type, priority, payload })
-      }, 20000);
+      }, submitTimeoutMs);
       if (!response.ok) {
         throw new Error((await response.json()).message ?? "Job submission failed");
       }
-      setMessage("Job accepted by queue");
+      setFormMessage("Job accepted by queue");
       void refresh();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Invalid request");
+      setFormMessage(error instanceof Error ? error.message : "Invalid request");
     } finally {
       setLoading(false);
     }
@@ -238,6 +247,7 @@ function App() {
           <RefreshCw size={18} />
         </button>
       </section>
+      {dashboardMessage && <p className="dashboard-message">{dashboardMessage}</p>}
 
       <section className="metrics-grid">
         <Metric icon={<Activity />} label="Total Jobs" value={totals.all} />
@@ -301,7 +311,7 @@ function App() {
           <button className="primary-button" type="submit" disabled={loading}>
             {loading ? "Submitting..." : "Queue job"}
           </button>
-          {message && <p className="form-message">{message}</p>}
+          {formMessage && <p className="form-message">{formMessage}</p>}
         </form>
 
         <div className="operations-column">
