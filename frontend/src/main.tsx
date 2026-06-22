@@ -101,9 +101,11 @@ function App() {
   const [refreshing, setRefreshing] = useState(false);
   const [message, setMessage] = useState("");
   const refreshInFlight = useRef(false);
+  const refreshQueued = useRef(false);
 
   async function refresh() {
     if (refreshInFlight.current) {
+      refreshQueued.current = true;
       return;
     }
     refreshInFlight.current = true;
@@ -129,16 +131,18 @@ function App() {
           failed: metricsSnapshot.jobsByStatus.FAILED + metricsSnapshot.jobsByStatus.DEAD
         };
         const lastSample = samples[samples.length - 1];
-        if (nextSample.depth === 0 && lastSample?.depth === 0) {
+        if (lastSample?.depth === nextSample.depth) {
           return samples;
         }
         return [...samples.slice(-17), nextSample];
       });
-      const workersRes = await fetchWithTimeout(apiPath("/api/workers"));
+      const [workersRes, redisRes] = await Promise.all([
+        fetchWithTimeout(apiPath("/api/workers")),
+        fetchWithTimeout(apiPath("/api/metrics/redis"))
+      ]);
       if (workersRes.ok) {
         setWorkers(await workersRes.json());
       }
-      const redisRes = await fetchWithTimeout(apiPath("/api/metrics/redis"));
       if (redisRes.ok) {
         setRedisStats(await redisRes.json());
       }
@@ -150,6 +154,10 @@ function App() {
     } finally {
       setRefreshing(false);
       refreshInFlight.current = false;
+      if (refreshQueued.current) {
+        refreshQueued.current = false;
+        void refresh();
+      }
     }
   }
 
@@ -186,7 +194,7 @@ function App() {
         throw new Error((await response.json()).message ?? "Job submission failed");
       }
       setMessage("Job accepted by queue");
-      await refresh();
+      void refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Invalid request");
     } finally {
@@ -226,7 +234,7 @@ function App() {
             <h1>TaskForge</h1>
           </div>
         </div>
-        <button className={`icon-button ${refreshing ? "is-spinning" : ""}`} onClick={refresh} aria-label="Refresh dashboard" title="Refresh dashboard" disabled={refreshing}>
+        <button className={`icon-button ${refreshing ? "is-spinning" : ""}`} onClick={refresh} aria-label="Refresh dashboard" title="Refresh dashboard">
           <RefreshCw size={18} />
         </button>
       </section>
@@ -290,7 +298,7 @@ function App() {
             <textarea value={payload} onChange={(event) => setPayload(event.target.value)} spellCheck={false} />
           </label>
 
-          <button className="primary-button" disabled={loading}>
+          <button className="primary-button" type="submit" disabled={loading}>
             {loading ? "Submitting..." : "Queue job"}
           </button>
           {message && <p className="form-message">{message}</p>}
